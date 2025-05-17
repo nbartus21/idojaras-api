@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Időjárás API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Fejléc -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-primary-600 mb-2">Időjárás API</h1>
+            <p class="text-gray-600">Egyszerű időjárás információk bármely városra</p>
+        </header>
+
+        <!-- Keresés form -->
+        <div class="bg-white rounded-lg shadow-md mb-8 overflow-hidden">
+            <div class="bg-primary px-6 py-4">
+                <h2 class="text-white font-semibold text-lg">Időjárás keresés</h2>
+            </div>
+            <div class="p-6">
+                <form id="weather-form">
+                    <div class="mb-4">
+                        <label for="city" class="block text-sm font-medium text-gray-700 mb-1">Város neve</label>
+                        <div class="flex">
+                            <input type="text" id="city" name="city" 
+                                class="flex-1 rounded-l-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 px-4 py-2 border outline-none"
+                                placeholder="Pl.: Budapest" required>
+                            <button type="submit" 
+                                class="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-r-lg transition duration-200 flex items-center">
+                                <i class="bi bi-search mr-1"></i> Keresés
+                            </button>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">Add meg a város nevét, amelynek az időjárását szeretnéd megtekinteni.</p>
+                    </div>
+                    <div>
+                        <label for="user-id" class="block text-sm font-medium text-gray-700 mb-1">Felhasználói azonosító</label>
+                        <input type="text" id="user-id" name="user-id" 
+                            class="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20 px-4 py-2 border outline-none"
+                            placeholder="Az Ön egyedi azonosítója" value="test_user_123">
+                        <p class="text-sm text-gray-500 mt-1">A felhasználói azonosító szükséges a kérések korlátozásához (maximum 100 kérés/nap).</p>
+                    </div>
+                </form>
+                
+                <!-- Kinyitható/becsukható dokumentáció -->
+                <div class="mt-8">
+                    <button id="toggle-docs" class="w-full flex justify-between items-center bg-gray-50 hover:bg-gray-100 px-4 py-3 rounded-lg transition duration-200">
+                        <span class="font-semibold text-gray-700">Dokumentáció és használati példák</span>
+                        <i id="docs-icon" class="bi bi-chevron-down transition-transform duration-200"></i>
+                    </button>
+                    
+                    <div id="docs-content" class="hidden mt-4 border rounded-lg border-gray-200 p-4">
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">Mi ez az alkalmazás?</h3>
+                            <p class="text-gray-700 mb-2">Ez egy egyszerű HTTP API proxy szolgáltatás, amely egy külső időjárás API-t hív meg (Open-Meteo), és többletszolgáltatásokat nyújt hozzá.</p>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">Fő funkciók</h3>
+                            <ul class="space-y-2">
+                                <li class="flex items-start">
+                                    <div class="flex-shrink-0 h-5 w-5 text-green-500 mr-2">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Cache mechanizmus:</span> A válaszokat városonként cache-eli 10 percre, így csökkentve a külső API terhelését és gyorsítva a válaszidőt.
+                                    </div>
+                                </li>
+                                <li class="flex items-start">
+                                    <div class="flex-shrink-0 h-5 w-5 text-green-500 mr-2">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Rate limiting:</span> Korlátozza a napi felhasználói kérésszámot (alapértelmezetten 100 kérés/nap/felhasználó) az <code class="bg-gray-100 px-1 py-0.5 rounded">X-User-Id</code> header alapján.
+                                    </div>
+                                </li>
+                                <li class="flex items-start">
+                                    <div class="flex-shrink-0 h-5 w-5 text-green-500 mr-2">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Diagnosztikai információ:</span> A válaszban jelzi, hogy az adat cache-ből érkezett-e vagy sem.
+                                    </div>
+                                </li>
+                                <li class="flex items-start">
+                                    <div class="flex-shrink-0 h-5 w-5 text-green-500 mr-2">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium">Metrikák:</span> Követi és megjeleníti a használati statisztikákat, beleértve a cache találatok számát, a rate limit túllépéseket és az API hívások számát.
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">API használati példák</h3>
+                            
+                            <h4 class="font-medium text-gray-700 mt-3 mb-2">1. Alap időjárás lekérés curl-lel</h4>
+                            <pre class="bg-gray-800 text-green-400 rounded-lg p-4 overflow-x-auto mb-4">curl -X GET "http://localhost:3001/weather?city=Budapest" \
+-H "X-User-Id: test_user_123"</pre>
+
+                            <h4 class="font-medium text-gray-700 mt-4 mb-2">2. Különböző városok összehasonlítása</h4>
+                            <div class="text-sm text-gray-700 mb-2">Több város időjárását is lekérheted egymás után:</div>
+                            <pre class="bg-gray-800 text-green-400 rounded-lg p-4 overflow-x-auto mb-4">curl -X GET "http://localhost:3001/weather?city=Debrecen" \
+-H "X-User-Id: test_user_123"
+
+curl -X GET "http://localhost:3001/weather?city=Szeged" \
+-H "X-User-Id: test_user_123"</pre>
+
+                            <h4 class="font-medium text-gray-700 mt-4 mb-2">3. Cache működésének tesztelése</h4>
+                            <div class="text-sm text-gray-700 mb-2">Ha ugyanazt a várost kétszer kérdezed le rövid időn belül, a második kérés cache-ből jön, amit a <code>fromCache</code> mező jelez:</div>
+                            <pre class="bg-gray-800 text-green-400 rounded-lg p-4 overflow-x-auto mb-4">curl -X GET "http://localhost:3001/weather?city=Miskolc" \
+-H "X-User-Id: test_user_123"
+
+# Ezt imételd meg röviddel később, és a fromCache: true lesz</pre>
+
+                            <h4 class="font-medium text-gray-700 mt-4 mb-2">4. Metrikák lekérése</h4>
+                            <pre class="bg-gray-800 text-green-400 rounded-lg p-4 overflow-x-auto mb-4">curl -X GET "http://localhost:3001/metrics"</pre>
+
+                            <h4 class="font-medium text-gray-700 mt-4 mb-2">5. Rate limit tesztelése</h4>
+                            <div class="text-sm text-gray-700 mb-2">Különböző felhasználókra külön limitet tart nyilván:</div>
+                            <pre class="bg-gray-800 text-green-400 rounded-lg p-4 overflow-x-auto mb-4">curl -X GET "http://localhost:3001/weather?city=Pécs" \
+-H "X-User-Id: other_user_456"</pre>
+                            <div class="text-sm text-gray-700 mb-2">Ha 100-nál több kérést küldesz ugyanazzal a felhasználói azonosítóval egy napon belül, 429-es (Too Many Requests) hibaüzenetet kapsz.</div>
+                        </div>
+
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">JavaScript példa</h3>
+                            <pre class="bg-gray-800 text-blue-400 rounded-lg p-4 overflow-x-auto mb-4">// Fetching weather data using JavaScript
+async function getWeather(city, userId = 'test_user_123') {
+  try {
+    const response = await fetch(`http://localhost:3001/weather?city=${city}`, {
+      headers: {
+        'X-User-Id': userId
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log(`Weather in ${city}:`, data);
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch weather:', error);
+  }
+}
+
+// Usage
+getWeather('Budapest');</pre>
+                        </div>
+
+                        <div class="mb-6">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">Technikai részletek</h3>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <p class="mb-2"><span class="font-medium">Backend:</span> NodeJS / Express.js TypeScript-ben írva</p>
+                                <p class="mb-2"><span class="font-medium">Adattárolás:</span> Memóriában tárolt cache és rate limit számlálók</p>
+                                <p class="mb-2"><span class="font-medium">Külső API:</span> <a href="https://open-meteo.com/" target="_blank" class="text-primary hover:underline">Open-Meteo</a> ingyenes időjárás API</p>
+                                <p class="mb-2"><span class="font-medium">Frontend:</span> Tailwind CSS alapú felhasználói felület</p>
+                                <p><span class="font-medium">Forráskód szervezet:</span> Moduláris felépítés a könnyű bővíthetőségért</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold mb-2 text-gray-800">API válasz formátuma</h3>
+                            <pre class="bg-gray-800 text-blue-400 rounded-lg p-4 overflow-x-auto">{
+  "latitude": 47.5,
+  "longitude": 19.04,
+  "timezone": "Europe/Budapest",
+  "current_weather": {
+    "temperature": 24.3,
+    "windspeed": 5.2,
+    "winddirection": 220,
+    "weathercode": 1,
+    "time": "2023-09-10T15:00"
+  },
+  "hourly": {
+    "time": ["2023-09-10T00:00", ...],
+    "temperature_2m": [15.2, 14.8, ...],
+    "precipitation": [0, 0, ...],
+    "weathercode": [0, 0, ...],
+    "windspeed_10m": [3.1, 3.0, ...]
+  },
+  "fromCache": true
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Időjárás eredmény -->
+        <div id="weather-result" class="hidden bg-white rounded-lg shadow-md mb-8">
+            <div class="bg-success px-6 py-4 flex justify-between items-center">
+                <h2 class="text-white font-semibold text-lg">Időjárás információk</h2>
+                <span id="cache-badge" class="bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">Friss adat</span>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Bal oldal - Fő időjárás -->
+                    <div class="text-center">
+                        <h3 id="city-name" class="text-xl font-semibold mb-2">Budapest</h3>
+                        <div class="text-6xl text-primary mb-4">
+                            <i id="weather-icon" class="bi bi-cloud-sun"></i>
+                        </div>
+                        <div class="text-4xl font-bold mb-2">
+                            <span id="current-temp">22°C</span>
+                        </div>
+                        <div id="weather-description" class="text-gray-600">Enyhén felhős</div>
+                    </div>
+                    
+                    <!-- Jobb oldal - Részletes adatok -->
+                    <div>
+                        <ul class="space-y-2">
+                            <li class="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <span class="flex items-center text-gray-700">
+                                    <i class="bi bi-wind mr-2"></i> Szélsebesség
+                                </span>
+                                <span id="wind-speed" class="font-semibold">5.2 km/h</span>
+                            </li>
+                            <li class="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <span class="flex items-center text-gray-700">
+                                    <i class="bi bi-compass mr-2"></i> Szélirány
+                                </span>
+                                <span id="wind-direction" class="font-semibold">220°</span>
+                            </li>
+                            <li class="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <span class="flex items-center text-gray-700">
+                                    <i class="bi bi-droplet mr-2"></i> Csapadék
+                                </span>
+                                <span id="precipitation" class="font-semibold">0 mm</span>
+                            </li>
+                            <li class="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <span class="flex items-center text-gray-700">
+                                    <i class="bi bi-geo-alt mr-2"></i> Koordináták
+                                </span>
+                                <span id="coordinates" class="font-semibold">47.5°N, 19.04°E</span>
+                            </li>
+                            <li class="flex justify-between items-center p-3 bg-gray-50 rounded-md">
+                                <span class="flex items-center text-gray-700">
+                                    <i class="bi bi-clock mr-2"></i> Időzóna
+                                </span>
+                                <span id="timezone" class="font-semibold">Europe/Budapest</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Óránkénti előrejelzés -->
+                <div class="mt-8">
+                    <h4 class="text-lg font-semibold mb-3">Óránkénti előrejelzés</h4>
+                    <div class="overflow-x-auto">
+                        <div id="hourly-forecast" class="flex space-x-4 pb-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrikák gomb -->
+        <div class="text-center">
+            <a href="/metrics.html" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                <i class="bi bi-graph-up mr-2"></i> Metrikák megtekintése
+            </a>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-white bg-opacity-80 z-50 flex items-center justify-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+
+    <!-- Error toast -->
+    <div id="error-toast" class="hidden fixed bottom-4 right-4 bg-white rounded-lg shadow-lg max-w-sm z-50">
+        <div class="bg-danger px-4 py-2 rounded-t-lg flex justify-between items-center">
+            <span class="text-white font-medium">Hiba</span>
+            <button type="button" id="toast-close" class="text-white hover:text-gray-100">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div id="error-message" class="p-4">
+            Hiba történt az időjárás adatok lekérdezése során.
+        </div>
+    </div>
+
+    <script src="/js/weather.js"></script>
+</body>
+</html>
